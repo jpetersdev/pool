@@ -2,6 +2,7 @@ package pool
 
 import (
 	"fmt"
+	"context"
 	"sync"
 	"sync/atomic"
 	"github.com/jpetersdev/limiter"
@@ -16,18 +17,18 @@ const (
 )
 
 type Pool struct {
-	paused     		chan struct{}
-	finished   		chan struct{}
-	action     		chan string
+	paused     	chan struct{}
+	finished   	chan struct{}
+	action     	chan string
 	statusChan   	chan Status
 	availableChan   chan int64
-	status			string
+	status		string
 	workerStatus	map[int64]string
-	running    		int64
-	threads    		int64
-	task       		Task
+	running    	int64
+	threads    	int64
+	task       	Task
 	limiter         *limiter.Limiter
-	wg		  		sync.WaitGroup
+	wg		sync.WaitGroup
 }
 
 type Task interface {
@@ -41,7 +42,7 @@ type Status struct {
 }
 
 func NewWorkerPool(task Task, MaxWorkers int) (Pool, error) {
-	l, err := limiter.NewLimiter(int64(MaxWorkers), 0)
+	l, err := limiter.NewLimiter(context.Background(), int64(MaxWorkers), 0)
 	if err != nil { return Pool{}, err }
 	return Pool{
 		paused:        make(chan struct{}),
@@ -162,14 +163,14 @@ func (pool *Pool) addThread() {
 }
 
 func (pool *Pool) removeThread() {
-	if err := pool.limiter.Decrement(); err == nil {
+	if err := pool.limiter.Decrement(context.Background()); err == nil {
 		atomic.AddInt64(&pool.threads, -1)
 	}
 }
 
 func (pool *Pool) deletgator() {
 	for {
-		if err := pool.limiter.Acquire(); err != nil || pool.task.Complete() {
+		if err := pool.limiter.Acquire(context.Background()); err != nil || pool.task.Complete() {
 			continue
 		}
 		go func() {
